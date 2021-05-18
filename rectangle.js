@@ -3,16 +3,19 @@
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
     <meta charset="utf-8" />
-    <title></title>
+    <title>opengl Epic demo</title>
 </head>
 <body  onkeyup="keyHandUp(event)" onkeydown="keyHandDown(event)">
-    <canvas id="raycaster" width="1000" height="500" onclick="append(event)"></canvas>
+    <canvas id="raycaster" width="1000" height="500" onmousedown="append(event)"></canvas>
 </body>
 </html>
 <script>
     var camPos = [0, 0];
     var zoom = 1.0;
     var vlak = document.getElementById("raycaster");
+    var blockCoords = [];
+    var blockColor = [];
+    var lightRay = 0.0;
     vlak.style.borderWidth = "5px";
     vlak.style.borderStyle = "solid";
     gl = vlak.getContext("webgl2");
@@ -63,15 +66,18 @@
         }
     }
     function append(event) {
-        var xCoord = ((event.clientX - 13) / 500 - 1.0) / zoom;
-        var yCoord = -((event.clientY - 13) / 250 - 1.0) / zoom;
-
-            verticles.push(xCoord, yCoord + 0.1,
-                xCoord, yCoord,
-                xCoord + 0.1, yCoord,
-                xCoord, yCoord + 0.1,
-                xCoord + 0.1, yCoord + 0.1,
-                xCoord + 0.1, yCoord);
+        var xCoord = ((event.clientX - 13) / 500 - 1.0) / zoom - camPos[0];
+        var yCoord = -((event.clientY - 13) / 250 - 1.0) / zoom - camPos[1];
+        xCoord = Math.round(xCoord * 10) / 10;
+        yCoord = Math.round(yCoord * 5) / 5;
+        blockCoords.push(xCoord * 10, yCoord * 5);
+        
+        verticles.push(xCoord - 0.05, yCoord + 0.1,
+            xCoord - 0.05, yCoord - 0.1,
+            xCoord + 0.05, yCoord - 0.1,
+            xCoord - 0.05, yCoord + 0.1,
+            xCoord + 0.05, yCoord + 0.1,
+            xCoord + 0.05, yCoord - 0.1);
     }
     function createShader(gl, type, source) {
         var shader = gl.createShader(type);
@@ -79,25 +85,29 @@
         gl.compileShader(shader);
         return shader;
     }
-    function shaderAttribute(dimension, name, variable, shaderprogram) {
+    function shaderAttribute(dimension, name, variable, shaderprogram,stride) {
         var buf = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, buf);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(variable), gl.STATIC_DRAW);
         var positionvert = gl.getAttribLocation(shaderprogram, name);
         gl.enableVertexAttribArray(positionvert); 
-        gl.vertexAttribPointer(positionvert, dimension, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(positionvert, dimension, gl.FLOAT, false, stride, 0);
     }
     const fragshader = `
         precision mediump float;
+        varying float vertexcolor;
         void main() {
-            gl_FragColor = vec4(1.0,0.0,0.0,1.0);
+            gl_FragColor = vec4(1.0 - vertexcolor / 5.0,0.0,0.0,1.0);
         }`;
     const vershader = `
         attribute vec4 verticles;
+        attribute float color;
         uniform float zoom;
-        uniform float camPos;
+        uniform float camPos[2];
+        varying float vertexcolor;  
         void main() {
-            gl_Position = vec4(verticles[0] * zoom + camPos[0],verticles[1] * zoom + camPos[1],verticles[2],verticles[3]);  
+            vertexcolor = color;
+            gl_Position = vec4((verticles[0] + camPos[0]) * zoom,(verticles[1] + camPos[1]) * zoom,verticles[2],verticles[3]);  
         }`;
     var shaderprogram = gl.createProgram();
     var vs = createShader(gl, gl.VERTEX_SHADER, vershader);
@@ -115,20 +125,22 @@
             zoom /= 1.01;
         }
         if (Keys[2] == 1) {
-            camPos[0] += 1;
+            camPos[1] -= 0.01 / zoom;
         }
         if (Keys[3] == 1) {
-            camPos[1] -= 1;
+            camPos[0] += 0.01 / zoom;
         }
         if (Keys[4] == 1) {
-            camPos[0] -= 1;
+            camPos[1] += 0.01 / zoom;
         }
         if (Keys[5] == 1) {
-            camPos[1] += 1;
+            camPos[0] -= 0.01 / zoom;
         }
         gl.uniform1f(gl.getUniformLocation(shaderprogram, "zoom"), zoom);
-        gl.uniform2f(gl.getUniformLocation(shaderprogram, "camPos"), camPos[0],camPos[1]);
-        shaderAttribute(2, "verticles", verticles, shaderprogram);
+        gl.uniform1fv(gl.getUniformLocation(shaderprogram, "camPos"), camPos);
+        gl.uniform1f(gl.getUniformLocation(shaderprogram, "lightRay"), lightRay);
+        shaderAttribute(2, "verticles", verticles, shaderprogram,0);
+        shaderAttribute(1, "color", blockColor, shaderprogram,0);
         gl.drawArrays(gl.TRIANGLES, 0, verticles.length * 3.0);
         window.requestAnimationFrame(opengl);
     }
